@@ -10,6 +10,7 @@ We use various boundary conditions.
 import numpy as np
 import matplotlib.pyplot as plt
 import sympy as sp
+from scipy import sparse
 
 t = sp.Symbol('t')
 
@@ -73,6 +74,7 @@ class VibSolver:
         """
         u = self()
         ue = self.u_exact()
+
         return np.sqrt(self.dt*np.sum((ue-u)**2))
 
     def convergence_rates(self, m=4, N0=32):
@@ -103,6 +105,7 @@ class VibSolver:
             E.append(self.l2_error())
             dt.append(self.dt)
         r = [np.log(E[i-1]/E[i])/np.log(dt[i-1]/dt[i]) for i in range(1, m+1, 1)]
+
         return r, np.array(E), np.array(dt)
 
     def test_order(self, m=5, N0=100, tol=0.1):
@@ -141,8 +144,27 @@ class VibFD2(VibSolver):
         assert T.is_integer() and T % 2 == 0
 
     def __call__(self):
-        u = np.zeros(self.Nt+1)
-        return u
+        b = np.zeros(self.Nt+1)
+        C = 2 - self.w ** 2 * self.dt ** 2
+        C0 = - C / 2
+
+        A = sparse.diags([np.full(self.Nt, -C), np.ones(self.Nt+1), np.ones(self.Nt-1)], np.array([-1, 0, -2]), (self.Nt+1,self.Nt+1), "csr")
+
+        A = A.tolil()
+        A[1,0] = C0             # first derivative approximation
+        # Dirichlet Boundary conditions
+        A[0,:] = 0
+        A[0,0] = 1
+        A[-1,:] = 0
+        A[-1,-1] = 1
+        A = A.tocsr()
+
+        b[0] = self.I
+        b[self.Nt] = self.I      # Dirichlet Boundary conditions on b-vector
+
+        un = sparse.linalg.spsolve(A, b)
+
+        return un
 
 class VibFD3(VibSolver):
     """
@@ -180,10 +202,10 @@ class VibFD4(VibFD2):
 
 def test_order():
     w = 0.35
-    VibHPL(8, 2*np.pi/w, w).test_order()
+    # VibHPL(8, 2*np.pi/w, w).test_order()
     VibFD2(8, 2*np.pi/w, w).test_order()
-    VibFD3(8, 2*np.pi/w, w).test_order()
-    VibFD4(8, 2*np.pi/w, w).test_order(N0=20)
+    # VibFD3(8, 2*np.pi/w, w).test_order()
+    # VibFD4(8, 2*np.pi/w, w).test_order(N0=20)
 
 if __name__ == '__main__':
     test_order()
