@@ -183,8 +183,24 @@ class VibFD3(VibSolver):
         assert T.is_integer() and T % 2 == 0
 
     def __call__(self):
-        u = np.zeros(self.Nt+1)
-        return u
+        b = np.zeros(self.Nt+1)
+        C = 2 - self.w ** 2 * self.dt ** 2
+        C0 = - C / 2
+
+        A = sparse.diags([np.full(self.Nt, -C), np.ones(self.Nt+1), np.ones(self.Nt-1)], np.array([-1, 0, -2]), (self.Nt+1,self.Nt+1), "csr")
+
+        A = A.tolil()
+        A[1,0] = C0             # first derivative approximation
+        # Dirichlet Boundary conditions
+        A[0,:] = 0
+        A[0,0] = 1
+
+        A = A.tocsr()
+
+        b[0] = self.I
+
+        un = sparse.linalg.spsolve(A, b)
+        return un
 
 class VibFD4(VibFD2):
     """
@@ -202,9 +218,9 @@ class VibFD4(VibFD2):
 
 def test_order():
     w = 0.35
-    # VibHPL(8, 2*np.pi/w, w).test_order()
+    VibHPL(8, 2*np.pi/w, w).test_order()
     VibFD2(8, 2*np.pi/w, w).test_order()
-    # VibFD3(8, 2*np.pi/w, w).test_order()
+    VibFD3(8, 2*np.pi/w, w).test_order()
     # VibFD4(8, 2*np.pi/w, w).test_order(N0=20)
 
 if __name__ == '__main__':
